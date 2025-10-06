@@ -19,18 +19,20 @@ REPUTATION_CHAT_ID = -1003157897257
 def save_data():
     data = {
         'reputation': reputation,
-        'pending_reviews': pending_reviews
+        'pending_reviews': pending_reviews,
+        'reviews': reviews
     }
     with open('bot_data.json', 'w') as f:
         json.dump(data, f)
 
 def load_data():
-    global reputation, pending_reviews
+    global reputation, pending_reviews, reviews
     try:
         with open('bot_data.json', 'r') as f:
             data = json.load(f)
             reputation = data.get('reputation', {'good': 0, 'bad': 0, 'last_review': {'date': 'Нет', 'content': 'Нет'}})
             pending_reviews = data.get('pending_reviews', {})
+            reviews = data.get('reviews', [])
     except FileNotFoundError:
         pass
 REPUTATION_MESSAGE_ID = 49
@@ -43,7 +45,7 @@ async def update_reputation_message():
     total = reputation['good'] + reputation['bad']
     average = (reputation['good'] / total * 100) if total > 0 else 0
     average_10 = (reputation['good'] / total * 10) if total > 0 else 0
-    text = f"""<b>Репутация: Roeev | Work / @Roeev</b>
+    text = f"""<b>Репутация: <a href="https://t.me/Roeev">Roeev | Work</a> / @Roeev</b>
 
 ✅ <b>Хороших отзывов:</b> {reputation['good']}
 ❌ <b>Плохих отзывов:</b> {reputation['bad']}
@@ -71,10 +73,12 @@ pending_reviews = {}
 
 # Статистика репутации
 reputation = {'good': 0, 'bad': 0, 'last_review': {'date': 'Нет', 'content': 'Нет'}}
+reviews = []
 load_data()
 
 @dp.message()
 async def handle_messages(message: Message):
+    global reputation, reviews
     print(f"Получено сообщение: content_type={message.content_type}, text={message.text}, from_user={message.from_user}")
     # Проверяем тип сообщения: вступление или выход из группы
     if message.content_type in [ContentType.NEW_CHAT_MEMBERS, ContentType.LEFT_CHAT_MEMBER]:
@@ -109,14 +113,17 @@ async def handle_messages(message: Message):
             # Хороший отзыв, сразу одобряем
             try:
                 username = message.from_user.username or message.from_user.first_name
+                clean_text = message.text.replace('@Roeev', '').strip()
                 await bot.send_message(
                     chat_id=message.chat.id,
-                    text=f"Отправитель: @{username} {message.text} (хороший отзыв)"
+                    text=f"👍 <i><b>Новый отзыв от</b></i> <b>@{username}</b>\nОтзыв: <blockquote>{clean_text}</blockquote>\n(<b>+ еще 1 хорошая репутация у @Roeev</b>)\n<i>*Текущая хорошая репутация:</i> {reputation['good'] + 1} 👍",
+                    parse_mode='HTML'
                 )
                 reputation['good'] += 1
+                reviews.append({'username': username, 'text': clean_text, 'type': 'good', 'date': datetime.now().strftime("%d.%m.%Y")})
                 reputation['last_review'] = {
                     'date': datetime.now().strftime("%d.%m.%Y"),
-                    'content': f"Отправитель: @{username} {message.text}"
+                    'content': f"Новый отзыв от @{username}\nОтзыв: {clean_text}\n(+ еще 1 хорошая репутация у @Roeev)\nТекущая хорошая репутация: {reputation['good']}"
                 }
                 save_data()
                 await update_reputation_message()
@@ -129,15 +136,18 @@ async def handle_messages(message: Message):
         try:
             data = pending_reviews[message.reply_to_message.message_id]
             await bot.delete_message(chat_id=message.chat.id, message_id=message.reply_to_message.message_id)
+            clean_text = data['text'].replace('@Roeev', '').strip()
             await bot.send_message(
                 chat_id=message.chat.id,
-                text=f"Отправитель: @{data['username']} {data['text']} (одобрен)"
+                text=f"👎 <i>Новый отзыв от</i> <b>@{data['username']}</b>\nОтзыв: <blockquote>{clean_text}</blockquote>\n(<b>- еще 1 плохая репутация у @Roeev</b>)\n<i>*Текущая плохая репутация:</i> {reputation['bad'] + 1} 👎",
+                parse_mode='HTML'
             )
             if data['type'] == 'bad':
                 reputation['bad'] += 1
+                reviews.append({'username': data['username'], 'text': clean_text, 'type': 'bad', 'date': datetime.now().strftime("%d.%m.%Y")})
             reputation['last_review'] = {
                 'date': datetime.now().strftime("%d.%m.%Y"),
-                'content': f"Отправитель: @{data['username']} {data['text']}"
+                'content': f"Новый отзыв от @{data['username']}\nОтзыв: {clean_text}\n(- еще 1 плохая репутация у @Roeev)\nТекущая плохая репутация: {reputation['bad']}"
             }
             save_data()
             await update_reputation_message()
@@ -173,6 +183,74 @@ async def handle_messages(message: Message):
             print(f"Инициализировано сообщение репутации с ID {msg.message_id}")
         except Exception as e:
             print(f"Ошибка инициализации: {e}")
+    # Команда /rep_roeev для добавления положительного отзыва
+    if message.text == "/rep_roeev" and message.from_user.id == OWNER_ID:
+        try:
+            clean_text = "обменял баксы очень быстро, отличный сервис, всегда на связи, рекомендую всем для безопасных обменов!"
+            await bot.send_message(
+                chat_id=message.chat.id,
+                text=f"👍 <i>Новый отзыв от</i><b>@Roeev</b>\nОтзыв: <blockquote>{clean_text}</blockquote>\n(<b>+ еще 1 хорошая репутация у @Roeev</b>)\nТекущая хорошая репутация: {reputation['good'] + 1} 👍",
+                parse_mode='HTML'
+            )
+            reputation['good'] += 1
+            reviews.append({'username': 'Roeev', 'text': clean_text, 'type': 'good', 'date': datetime.now().strftime("%d.%m.%Y")})
+            reputation['last_review'] = {
+                'date': datetime.now().strftime("%d.%m.%Y"),
+                'content': f"Новый отзыв от @Roeev\nОтзыв: {clean_text}\n(+ еще 1 хорошая репутация у @Roeev)\nТекущая хорошая репутация: {reputation['good']}"
+            }
+            save_data()
+            await update_reputation_message()
+            await message.delete()
+            print("Отзыв добавлен")
+        except Exception as e:
+            print(f"Ошибка добавления отзыва: {e}")
+    # Команда /list для списка отзывов
+    if message.text == "/list" and message.from_user.id == OWNER_ID:
+        try:
+            text = f"Общее хороших отзывов: {reputation['good']}\nОбщее плохих отзывов: {reputation['bad']}\n\nСписок отзывов с текстами:\n"
+            if not reviews:
+                text += "Нет отзывов с текстами."
+            else:
+                for i, rev in enumerate(reviews, 1):
+                    sign = '+' if rev['type'] == 'good' else '-'
+                    text += f"{i}. @{rev['username']} ({rev['date']}): {rev['text']} ({sign})\n"
+            await message.reply(text)
+        except Exception as e:
+            print(f"Ошибка списка: {e}")
+    # Команда /del для удаления отзыва
+    if message.text.startswith("/del ") and message.from_user.id == OWNER_ID:
+        try:
+            parts = message.text.split()
+            if len(parts) == 2:
+                num = int(parts[1]) - 1
+                if 0 <= num < len(reviews):
+                    rev = reviews.pop(num)
+                    if rev['type'] == 'good':
+                        reputation['good'] -= 1
+                    else:
+                        reputation['bad'] -= 1
+                    save_data()
+                    await update_reputation_message()
+                    await message.reply(f"Отзыв {num+1} удален.")
+                else:
+                    await message.reply("Неверный номер.")
+            else:
+                await message.reply("Используйте /del <номер>")
+        except ValueError:
+            await message.reply("Неверный формат номера.")
+        except Exception as e:
+            print(f"Ошибка удаления: {e}")
+    # Команда /reset для сброса репутации
+    if message.text == "/reset" and message.from_user.id == OWNER_ID:
+        try:
+            reputation = {'good': 0, 'bad': 0, 'last_review': {'date': 'Нет', 'content': 'Нет'}}
+            reviews = []
+            save_data()
+            await update_reputation_message()
+            await message.reply("Репутация сброшена.")
+            await message.delete()
+        except Exception as e:
+            print(f"Ошибка сброса: {e}")
 
 async def main():
     if WEBHOOK_URL:

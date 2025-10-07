@@ -35,7 +35,7 @@ def load_data():
             reviews = data.get('reviews', [])
     except FileNotFoundError:
         pass
-REPUTATION_MESSAGE_ID = 49
+REPUTATION_MESSAGE_ID = 207
 
 # Webhook
 WEBHOOK_PATH = "/webhook"
@@ -45,7 +45,7 @@ async def update_reputation_message():
     total = reputation['good'] + reputation['bad']
     average = (reputation['good'] / total * 100) if total > 0 else 0
     average_10 = (reputation['good'] / total * 10) if total > 0 else 0
-    text = f"""<b>Репутация: <a href="https://t.me/Roeev">Roeev | Work</a> / @Roeev</b>
+    text = f"""<b>Репутация: <a href="https://t.me/Roeev">Roeev | Work</a> | @Roeev</b>
 
 ✅ <b>Хороших отзывов:</b> {reputation['good']}
 ❌ <b>Плохих отзывов:</b> {reputation['bad']}
@@ -56,10 +56,10 @@ async def update_reputation_message():
 🔹 <b>Тренд репутации:</b> ↔️ стабильно
 🔹 <i>Рекомендуют:</i> {average:.1f}% пользователей"""
     try:
-        await bot.edit_message_text(
+        await bot.edit_message_caption(
             chat_id=REPUTATION_CHAT_ID,
             message_id=REPUTATION_MESSAGE_ID,
-            text=text,
+            caption=text,
             parse_mode='HTML'
         )
         print("Репутация обновлена")
@@ -94,7 +94,15 @@ async def handle_messages(message: Message):
         bad_words = ['хуйня', 'наебал', 'плохо', 'отстой', 'развод', 'мошенник', '-rep', '- rep', '-реп', '- реп']
         is_good = any(word in text_lower for word in good_words)
         is_bad = any(word in text_lower for word in bad_words)
-        if is_bad:
+        if message.from_user.id == OWNER_ID and (is_good or is_bad):
+            # Админ пытается оставить отзыв
+            try:
+                await message.reply("Админы не могут оставлять и накручивать себе репутацию")
+                await message.delete()
+                print("Админ попытался оставить отзыв")
+            except Exception as e:
+                print(f"Ошибка при ответе админу: {e}")
+        elif is_bad:
             # Плохой отзыв, на модерацию
             try:
                 reply_msg = await message.reply("Ваш отзыв временно удален,так как он в обработке,сейчас прийдет модератор и проверит его")
@@ -113,7 +121,25 @@ async def handle_messages(message: Message):
             # Хороший отзыв, сразу одобряем
             try:
                 username = message.from_user.username or message.from_user.first_name
-                clean_text = message.text.replace('@Roeev', '').strip()
+                text_lower = message.text.lower()
+                if any(rep in text_lower for rep in ['+rep', '+ rep', '+реп', '+ реп']) and '@roeev' not in text_lower:
+                    if '+rep ' in message.text:
+                        modified_text = message.text.replace('+rep ', '+rep @Roeev ', 1)
+                    elif '+ rep ' in message.text:
+                        modified_text = message.text.replace('+ rep ', '+ rep @Roeev ', 1)
+                    elif '+реп ' in message.text:
+                        modified_text = message.text.replace('+реп ', '+реп @Roeev ', 1)
+                    elif '+ реп ' in message.text:
+                        modified_text = message.text.replace('+ реп ', '+ реп @Roeev ', 1)
+                    elif text_lower.strip() in ['+rep', '+реп']:
+                        modified_text = message.text.strip() + ' @Roeev'
+                    elif text_lower.strip() in ['+ rep', '+ реп']:
+                        modified_text = message.text.strip() + ' @Roeev'
+                    else:
+                        modified_text = message.text
+                else:
+                    modified_text = message.text
+                clean_text = modified_text
                 await bot.send_message(
                     chat_id=message.chat.id,
                     text=f"👍 <i><b>Новый отзыв от</b></i> <b>@{username}</b>\nОтзыв: <blockquote>{clean_text}</blockquote>\n(<b>+ еще 1 хорошая репутация у @Roeev</b>)\n<i>*Текущая хорошая репутация:</i> {reputation['good'] + 1} 👍",
@@ -123,7 +149,7 @@ async def handle_messages(message: Message):
                 reviews.append({'username': username, 'text': clean_text, 'type': 'good', 'date': datetime.now().strftime("%d.%m.%Y")})
                 reputation['last_review'] = {
                     'date': datetime.now().strftime("%d.%m.%Y"),
-                    'content': f"Новый отзыв от @{username}\nОтзыв: {clean_text}\n(+ еще 1 хорошая репутация у @Roeev)\nТекущая хорошая репутация: {reputation['good']}"
+                    'content': f"@{username} (+rep): {clean_text}"
                 }
                 save_data()
                 await update_reputation_message()
@@ -147,7 +173,7 @@ async def handle_messages(message: Message):
                 reviews.append({'username': data['username'], 'text': clean_text, 'type': 'bad', 'date': datetime.now().strftime("%d.%m.%Y")})
             reputation['last_review'] = {
                 'date': datetime.now().strftime("%d.%m.%Y"),
-                'content': f"Новый отзыв от @{data['username']}\nОтзыв: {clean_text}\n(- еще 1 плохая репутация у @Roeev)\nТекущая плохая репутация: {reputation['bad']}"
+                'content': f"@{data['username']} (-rep): {clean_text}"
             }
             save_data()
             await update_reputation_message()
@@ -175,9 +201,11 @@ async def handle_messages(message: Message):
     # Команда /init_rep для инициализации сообщения репутации
     if message.text == "/init_rep" and message.from_user.id == OWNER_ID:
         try:
-            msg = await bot.send_message(
+            photo_url = "https://dl.dropboxusercontent.com/scl/fi/78qa1gk8x4j1jyv30lvre/photo_2025-10-06_17-45-34-1.jpg?rlkey=l31pkl2i2fpvc3aivwvmhkk8d&st=eatp97wj"
+            msg = await bot.send_photo(
                 chat_id=REPUTATION_CHAT_ID,
-                text="Инициализация репутации..."
+                photo=photo_url,
+                caption="Инициализация репутации..."
             )
             await message.reply(f"Сообщение отправлено, ID: {msg.message_id}. Обновите REPUTATION_MESSAGE_ID в коде на {msg.message_id}.")
             print(f"Инициализировано сообщение репутации с ID {msg.message_id}")
@@ -196,7 +224,7 @@ async def handle_messages(message: Message):
             reviews.append({'username': 'Roeev', 'text': clean_text, 'type': 'good', 'date': datetime.now().strftime("%d.%m.%Y")})
             reputation['last_review'] = {
                 'date': datetime.now().strftime("%d.%m.%Y"),
-                'content': f"Новый отзыв от @Roeev\nОтзыв: {clean_text}\n(+ еще 1 хорошая репутация у @Roeev)\nТекущая хорошая репутация: {reputation['good']}"
+                'content': f"@Roeev (+rep): {clean_text}"
             }
             save_data()
             await update_reputation_message()

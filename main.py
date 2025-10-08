@@ -201,7 +201,7 @@ async def handle_messages(message: Message):
     # Команда /init_rep для инициализации сообщения репутации
     if message.text == "/init_rep" and message.from_user.id == OWNER_ID:
         try:
-            photo_url = "https://dl.dropboxusercontent.com/scl/fi/78qa1gk8x4j1jyv30lvre/photo_2025-10-06_17-45-34-1.jpg?rlkey=l31pkl2i2fpvc3aivwvmhkk8d&st=eatp97wj"
+            photo_url = "https://www.dropbox.com/scl/fi/flnay0kx7r1ij1027ej5e/roeev.png?rlkey=rd4utjaj8w930456222fa6j8e&st=3zytu9il&dl=0"
             msg = await bot.send_photo(
                 chat_id=REPUTATION_CHAT_ID,
                 photo=photo_url,

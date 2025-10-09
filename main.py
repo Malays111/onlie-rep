@@ -201,7 +201,7 @@ async def handle_messages(message: Message):
     # Команда /init_rep для инициализации сообщения репутации
     if message.text == "/init_rep" and message.from_user.id == OWNER_ID:
         try:
-            photo_url = "https://www.dropbox.com/scl/fi/flnay0kx7r1ij1027ej5e/roeev.png?rlkey=rd4utjaj8w930456222fa6j8e&st=3zytu9il&dl=0"
+            photo_url = "https://dl.dropboxusercontent.com/scl/fi/78qa1gk8x4j1jyv30lvre/photo_2025-10-06_17-45-34-1.jpg?rlkey=l31pkl2i2fpvc3aivwvmhkk8d&st=eatp97wj"
             msg = await bot.send_photo(
                 chat_id=REPUTATION_CHAT_ID,
                 photo=photo_url,
@@ -291,11 +291,58 @@ async def main():
         )
         webhook_requests_handler.register(app, path=WEBHOOK_PATH)
         setup_application(app, dp, bot=bot)
+
+        # Добавляем API endpoint для отзывов
+        async def get_reviews(request):
+            try:
+                with open('bot_data.json', 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+
+                reviews = data.get('reviews', [])
+                latest_reviews = reviews[-7:] if len(reviews) > 7 else reviews
+
+                sorted_reviews = sorted(latest_reviews,
+                                      key=lambda x: datetime.strptime(x['date'], "%d.%m.%Y"),
+                                      reverse=True)
+
+                response = web.json_response({
+                    'success': True,
+                    'reviews': sorted_reviews,
+                    'total': len(sorted_reviews)
+                })
+
+                # Добавляем CORS заголовки
+                response.headers['Access-Control-Allow-Origin'] = '*'
+                response.headers['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+                response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+
+                return response
+            except Exception as e:
+                error_response = web.json_response({
+                    'success': False,
+                    'error': str(e)
+                }, status=500)
+
+                error_response.headers['Access-Control-Allow-Origin'] = '*'
+                return error_response
+
+        app.router.add_get('/api/reviews', get_reviews)
+
+        # Добавляем CORS preflight handler
+        async def cors_handler(request):
+            response = web.Response()
+            response.headers['Access-Control-Allow-Origin'] = '*'
+            response.headers['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+            return response
+
+        app.router.add_options('/api/reviews', cors_handler)
+
         runner = web.AppRunner(app)
         await runner.setup()
         site = web.TCPSite(runner, host="0.0.0.0", port=int(os.getenv("PORT", 8080)))
         await site.start()
-        print("Бот запущен в режиме webhook")
+        print("Бот запущен в режиме webhook с API endpoint /api/reviews")
         # Keep the event loop running
         await asyncio.EventLoop().create_future()
     else:

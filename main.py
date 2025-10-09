@@ -295,29 +295,36 @@ async def main():
         # Добавляем API endpoint для отзывов
         async def get_reviews(request):
             try:
+                print(f"📡 API запрос от {request.remote}")
                 with open('bot_data.json', 'r', encoding='utf-8') as f:
                     data = json.load(f)
 
                 reviews = data.get('reviews', [])
+                print(f"📊 Найдено отзывов: {len(reviews)}")
                 latest_reviews = reviews[-7:] if len(reviews) > 7 else reviews
 
                 sorted_reviews = sorted(latest_reviews,
                                       key=lambda x: datetime.strptime(x['date'], "%d.%m.%Y"),
                                       reverse=True)
 
-                response = web.json_response({
+                response_data = {
                     'success': True,
                     'reviews': sorted_reviews,
                     'total': len(sorted_reviews)
-                })
+                }
+                print(f"📤 Отправляем {len(sorted_reviews)} отзывов")
+
+                response = web.json_response(response_data)
 
                 # Добавляем CORS заголовки
                 response.headers['Access-Control-Allow-Origin'] = '*'
-                response.headers['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
-                response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+                response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+                response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+                response.headers['Access-Control-Max-Age'] = '86400'
 
                 return response
             except Exception as e:
+                print(f"❌ Ошибка API: {e}")
                 error_response = web.json_response({
                     'success': False,
                     'error': str(e)
@@ -332,11 +339,13 @@ async def main():
         async def cors_handler(request):
             response = web.Response()
             response.headers['Access-Control-Allow-Origin'] = '*'
-            response.headers['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
-            response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+            response.headers['Access-Control-Max-Age'] = '86400'
             return response
 
         app.router.add_options('/api/reviews', cors_handler)
+        app.router.add_route('*', '/api/reviews', cors_handler)
 
         runner = web.AppRunner(app)
         await runner.setup()

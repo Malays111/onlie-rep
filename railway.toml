@@ -1,0 +1,9 @@
+[build]
+builder = "python"
+
+[deploy]
+startCommand = "python api_server.py"
+healthcheckPath = "/api/reviews"
+
+[environments]
+production = { variables = { PORT = "${{ RAILWAY_STATIC_URL }}" } }
